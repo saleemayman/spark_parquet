@@ -5,6 +5,7 @@ import scala.io.Source;
 import scala.util.control.NonFatal
 import scala.collection.mutable.StringBuilder
 
+// import org.apache.spark.implicits._;
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
@@ -12,69 +13,22 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.SparkSession
 
-// trait dbConn {
-//     val conn: Connection
-// }
-
-// class pgJDBCConnection(db_name: Option[String], user: Option[String], pass: Option[String], server_ip: Option[String], port: Option[String]) {
-
-//     def conn: Connection;
-//     val conn_str: String = "jdbc:postgresql://" + server_ip.getOrElse("") + ":" + port.getOrElse("") + "/" + db_name.getOrElse("") + "?user=" + user.getOrElse("") + "&password=" + pass.getOrElse("");
-    
-//     // connect to database
-//     try {
-//         //val conn: Connection = DriverManager.getConnection(conn_str);
-//         // conn = Some(DriverManager.getConnection(conn_str));
-//         conn = DriverManager.getConnection(conn_str);
-//     }
-//     catch {
-//         case NonFatal(e) => e.printStackTrace;
-//         //case e: Exception => e.printStackTrace;
-//     }
-    
-    
-//     // get connection
-//     def getConn(): Connection = {
-//         conn;
-//     }
-
-//     def getStatement(): Statement = {
-//         conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-//         // conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-//         // conn match {
-//         //     //case None => None: Option[Statement]
-//         //     case Some(value) => value.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-//         // }
-//     }
-
-
-//     def closeConn() {
-//         // conn.map(c => c.close);
-//         conn.close;
-//     }
-
-// }
 
 // for reading CSV files and loading them to postgres
-class readAllData(db_name: Option[String], user: Option[String], pass: Option[String], server_ip: Option[String], port: Option[String]) {
-// object readAllData() {
+class readAllData(table_name: Option[String], db_name: Option[String], user: Option[String], pass: Option[String], server_ip: Option[String], port: Option[String]) {
     val conn_str: String = "jdbc:postgresql://" + server_ip.getOrElse("") + ":" + port.getOrElse("") + "/" + db_name.getOrElse("") + "?user=" + user.getOrElse("") + "&password=" + pass.getOrElse("");
-    println(conn_str)
     val sqlStr = new StringBuilder();
+
+    // connect to postgres DB
     val conn = DriverManager.getConnection(conn_str);
-    val tableName: String = "balloonData_subdata_1";
 
     def readAndLoadToDB()
     {
-        // connect to postgres DB
-        // val dbConn: pgJDBCConnection = new pgJDBCConnection(db_name, user, pass, server_ip, port);
-        // val conn: Connection = dbConn.getConn();
-        // val stmnt: Statement = dbConn.getStatement();
         val stmnt: Statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
 
         // create main data table if not existing. 
-        stmnt.execute("DROP TABLE IF EXISTS " + tableName);
-        stmnt.execute("CREATE TABLE IF NOT EXISTS " + tableName + "(ID VARCHAR, SOUNDING_DATE INT, HOUR INT, RELTIME INT, NUMLEV INT, P_SRC VARCHAR, NP_SRC VARCHAR, LAT INT, LON INT, LVLTYP1 INT, LVLTYP2 INT, ETIME INT, PRESS INT, PFLAG VARCHAR, GPH INT, ZFLAG VARCHAR, TEMP INT, TFLAG VARCHAR, RH INT, DPDP INT, WDIR INT, WSPD INT)");
+        stmnt.execute("DROP TABLE IF EXISTS " + table_name.getOrElse(""));
+        stmnt.execute("CREATE TABLE IF NOT EXISTS " + table_name.getOrElse("") + "(ID VARCHAR, SOUNDING_DATE INT, HOUR INT, RELTIME INT, NUMLEV INT, P_SRC VARCHAR, NP_SRC VARCHAR, LAT INT, LON INT, LVLTYP1 INT, LVLTYP2 INT, ETIME INT, PRESS INT, PFLAG VARCHAR, GPH INT, ZFLAG VARCHAR, TEMP INT, TFLAG VARCHAR, RH INT, DPDP INT, WDIR INT, WSPD INT)");
 
         // CSV data file locations to read
         //val fileName: List[String] = List("data/USM00070219-data.txt", "data/USM00070261-data.txt", "data/USM00070308-data.txt", "data/USM00070361-data.txt", "data/USM00070398-data.txt");
@@ -97,7 +51,7 @@ class readAllData(db_name: Option[String], user: Option[String], pass: Option[St
                 // grab header record
                 if (l.contains("#")) {
                     sqlStr.setLength(0)
-                    sqlStr.append("insert into " + tableName + "(ID, SOUNDING_DATE, HOUR, RELTIME, NUMLEV, P_SRC, NP_SRC, LAT, LON, LVLTYP1, LVLTYP2, ETIME, PRESS, PFLAG, GPH, ZFLAG, TEMP, TFLAG, RH, DPDP, WDIR, WSPD)  values ");
+                    sqlStr.append("insert into " + table_name.getOrElse("") + "(ID, SOUNDING_DATE, HOUR, RELTIME, NUMLEV, P_SRC, NP_SRC, LAT, LON, LVLTYP1, LVLTYP2, ETIME, PRESS, PFLAG, GPH, ZFLAG, TEMP, TFLAG, RH, DPDP, WDIR, WSPD)  values ");
                     h_rec = null;
                     count = 0;
                     h_rec = List(l.slice(0,1), l.slice(1,12), l.slice(13, 17)+l.slice(18,20)+l.slice(21,23), l.slice(24,26), l.slice(27,31), l.slice(32,36), l.slice(37,45), l.slice(46,54), l.slice(55,62), l.slice(63,71));
@@ -116,11 +70,7 @@ class readAllData(db_name: Option[String], user: Option[String], pass: Option[St
 
                     // check if last record for the sounding is reached in the file
                     if (count == h_rec(5).strip.toInt) {
-                        // remove trailing comma and white space from SQL command
-                        //sqlStr = sqlStr.strip.stripSuffix(",");
-                        
                         // insert all values to DB table for given sounding record 
-                        // println(sqlStr.stripSuffix(",").toString)
                         stmnt.execute(sqlStr.stripSuffix(",").toString);
                     }
                 }
@@ -143,13 +93,10 @@ object SparkTestMain {
         val server_ip: Option[String] = Some(args(3))
         val port: Option[String] = Some(args(4))
         
-        val tableName: String = "balloonData_subdata_1";
-
+        val tableName: Option[String] = Some("balloonData_subdata_1");
 
         // first read all data
-        /* Please un/comment to load CSVs to PostgreSQL as required. */
-        // readAllData.readAndLoadToDB();
-        val readData = new readAllData(db_name, user, pass, server_ip, port);
+        val readData = new readAllData(tableName, db_name, user, pass, server_ip, port);
         readData.readAndLoadToDB();
 
 
@@ -164,20 +111,20 @@ object SparkTestMain {
         // load the postgres table in the current spark session and partition based on GPH
         val jdbcDF = spark.read.format("jdbc")
                         .option("url", "jdbc:postgresql://"+server_ip.getOrElse("")+":"+port.getOrElse("")+"/" + user.getOrElse(""))
-                        .option("dbtable", tableName)
+                        .option("dbtable", tableName.getOrElse(""))
                         .option("user", user.getOrElse(""))
                         .option("password", pass.getOrElse(""))
                         .load();
-        jdbcDF.createOrReplaceTempView(tableName);
+        jdbcDF.createOrReplaceTempView(tableName.getOrElse(""));
         
         
         // get max GPH height
-        val df = spark.sql("select max(GPH) as GMAX from " + tableName + "");
+        val df = spark.sql("select max(GPH) as GMAX from " + tableName.getOrElse("") + "");
         val g_max = df.first().getInt(0);
 
         // write all data for GPH -9999 and -8888 codes
-        val dfGPH_QA = spark.sql("select * from " + tableName + " where GPH < 0 ");
-        dfGPH_QA.write.partitionBy("GPH").parquet("data/" + tableName + "_mssing_QA.parquet");
+        val dfGPH_QA = spark.sql("select * from " + tableName.getOrElse("") + " where GPH < 0 ");
+        dfGPH_QA.write.partitionBy("GPH").parquet("data/" + tableName.getOrElse("") + "_mssing_QA.parquet");
 
 
         // read data in chunks of 1000 GPH and dump as parquet files
@@ -185,12 +132,12 @@ object SparkTestMain {
         while (height < g_max+1) {
             val height_lim: Int = height + 1000;
 
-            val dfGPH = spark.sql("select *, floor((GPH-1)/1000) as PARTITION from " + tableName + " where GPH > " + height + " and GPH <= " + height_lim);
-            dfGPH.write.partitionBy("PARTITION", "ID").parquet("data/" + tableName + height + "_" + height_lim + ".parquet");
+            val dfGPH = spark.sql("select *, floor((GPH-1)/1000) as PARTITION from " + tableName.getOrElse("") + " where GPH > " + height + " and GPH <= " + height_lim);
+            dfGPH.write.partitionBy("PARTITION", "ID").parquet("data/" + tableName.getOrElse("") + height + "_" + height_lim + ".parquet");
 
             height += 1000;
         }
-    println("END!!!!")
+    println("\nEND!!!!\n")
     }
 }
 
