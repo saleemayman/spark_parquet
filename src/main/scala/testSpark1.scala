@@ -32,16 +32,24 @@ class readAllData(table_name: Option[String], db_name: Option[String], user: Opt
 
         // CSV data file locations to read
         //val fileName: List[String] = List("data/USM00070219-data.txt", "data/USM00070261-data.txt", "data/USM00070308-data.txt", "data/USM00070361-data.txt", "data/USM00070398-data.txt");
-        val fileName: List[String] = List("subdata_1.txt");
+        val fileName: List[String] = List("subdata.txt");
+        // scala> import java.io.File
+        // scala> new java.io.File(fileName(0)).exists
+        // res12: Boolean = true
+        // scala> scala.reflect.io.File(fileName(0)).exists
+        // res13: Boolean = true
+
+
 
         for (file <- fileName) {
             println("Reading file: " + file + " . . . . ");
+            // TODO: use iterator for full data
             val lines: List[String] = Source.fromFile(file).getLines.toList;
             println("num of records (with headers): " + lines.size);
 
             var count: Int = 0;
-            var h_rec: List[String] = null;
-            var data_rec: List[String] = null;
+            var h_rec: List[String] = null; // TODO: filter the headers before looping over the full data_recs
+            // var data_rec: List[String] = null;
         
             println("Inserting data for file: " + file + ". This will take some time!"); 
 
@@ -54,22 +62,24 @@ class readAllData(table_name: Option[String], db_name: Option[String], user: Opt
                     sqlStr.append("insert into " + table_name.getOrElse("") + "(ID, SOUNDING_DATE, HOUR, RELTIME, NUMLEV, P_SRC, NP_SRC, LAT, LON, LVLTYP1, LVLTYP2, ETIME, PRESS, PFLAG, GPH, ZFLAG, TEMP, TFLAG, RH, DPDP, WDIR, WSPD)  values ");
                     h_rec = null;
                     count = 0;
-                    h_rec = List(l.slice(0,1), l.slice(1,12), l.slice(13, 17)+l.slice(18,20)+l.slice(21,23), l.slice(24,26), l.slice(27,31), l.slice(32,36), l.slice(37,45), l.slice(46,54), l.slice(55,62), l.slice(63,71));
+                    val h_rec_tmp: List[String] = List(l.slice(0,1), l.slice(1,12), l.slice(13, 17)+l.slice(18,20)+l.slice(21,23), l.slice(24,26), l.slice(27,31), l.slice(32,36), l.slice(37,45), l.slice(46,54), l.slice(55,62), l.slice(63,71));
+                    h_rec = h_rec_tmp.map(a => a.replaceAll(" ", ""))
                 } 
             
                 // get all data records per above header
                 if (!l.contains("#")) {
-                    data_rec = null;
-                    data_rec = List(l.slice(0,1), l.slice(1,2), l.slice(3,8), l.slice(9,15), l.slice(15,16), l.slice(16,21), l.slice(21,22), l.slice(22,27), l.slice(27,28), l.slice(28,33), l.slice(34,39), l.slice(40,45), l.slice(46,51));
+                    //data_rec = null;
+                    val data_rec_tmp: List[String] = List(l.slice(0,1), l.slice(1,2), l.slice(3,8), l.slice(9,15), l.slice(15,16), l.slice(16,21), l.slice(21,22), l.slice(22,27), l.slice(27,28), l.slice(28,33), l.slice(34,39), l.slice(40,45), l.slice(46,51));
+                    val data_rec: List[String] = data_rec_tmp.map(a => a.replaceAll(" ", ""))
                 
                     // add all data per sounding to insert query and cast all columns to correct data type
-                    val query: String = "('"+h_rec(1).strip+"',"+h_rec(2).strip.toInt+","+h_rec(3).strip.toInt+","+h_rec(4).strip.toInt+","+h_rec(5).strip.toInt+",'"+h_rec(6).strip+"','"+h_rec(7).strip+"',"+h_rec(8).strip.toInt+","+h_rec(9).strip.toInt+","+data_rec(0).strip.toInt+","+data_rec(1).strip.toInt+","+data_rec(2).strip.toInt+","+data_rec(3).strip.toInt+",'"+data_rec(4).strip+"',"+data_rec(5).strip.toInt+",'"+data_rec(6).strip+"',"+data_rec(7).strip.toInt+",'"+data_rec(8).strip+"',"+data_rec(9).strip.toInt+","+data_rec(10).strip.toInt+","+data_rec(11).strip.toInt+","+data_rec(12).strip.toInt+"),";
+                    val query: String = "('"+h_rec(1)+"',"+h_rec(2).toInt+","+h_rec(3).toInt+","+h_rec(4).toInt+","+h_rec(5).toInt+",'"+h_rec(6)+"','"+h_rec(7)+"',"+h_rec(8).toInt+","+h_rec(9).toInt+","+data_rec(0).toInt+","+data_rec(1).toInt+","+data_rec(2).toInt+","+data_rec(3).toInt+",'"+data_rec(4)+"',"+data_rec(5).toInt+",'"+data_rec(6)+"',"+data_rec(7).toInt+",'"+data_rec(8)+"',"+data_rec(9).toInt+","+data_rec(10).toInt+","+data_rec(11).toInt+","+data_rec(12).toInt+"),";
                     sqlStr.append(query);
 
                     count += 1;
 
                     // check if last record for the sounding is reached in the file
-                    if (count == h_rec(5).strip.toInt) {
+                    if (count == h_rec(5).toInt) {
                         // insert all values to DB table for given sounding record 
                         stmnt.execute(sqlStr.stripSuffix(",").toString);
                     }
@@ -92,6 +102,10 @@ object SparkTestMain {
         val pass: Option[String] = Some(args(2))
         val server_ip: Option[String] = Some(args(3))
         val port: Option[String] = Some(args(4))
+        println(db_name)
+        println(user)
+        println(pass)
+        println(server_ip)
         
         val tableName: Option[String] = Some("balloonData_subdata_1");
 
@@ -103,7 +117,7 @@ object SparkTestMain {
         // init spark context and import implicits
         val conf = new SparkConf().setAppName("SPARKTEST1")
                                 .setMaster("local[*]")
-                                .set("spark.driver.memory", "8g");
+                                .set("spark.driver.memory", "2g");
         val sc = new SparkContext(conf);
         val spark = SparkSession.builder().appName("Spark reading jdbc").getOrCreate();
         import spark.implicits._;
